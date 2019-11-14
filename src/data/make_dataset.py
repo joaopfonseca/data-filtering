@@ -3,7 +3,20 @@ import click
 import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
+import pickle
+import sqlite3
+import numpy as np
 
+def importdb(db):
+    global tbl
+    conn = sqlite3.connect(db)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = {}
+    for table in c.fetchall():
+        tbl = np.array(list(c.execute(f'SELECT * from "{table[0]}";')))
+        tables[table[0]] = {'X': tbl[:,:-1], 'y': tbl[:,-1]}
+    return tables
 
 @click.command()
 @click.argument('input_filepath', type=click.Path(exists=True))
@@ -14,6 +27,9 @@ def main(input_filepath, output_filepath):
     """
     logger = logging.getLogger(__name__)
     logger.info('making final data set from raw data')
+
+    data = importdb(input_filepath)
+    pickle.dump(obj=data, file=open(output_filepath, 'wb'))
 
 
 if __name__ == '__main__':
