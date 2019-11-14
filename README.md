@@ -17,7 +17,7 @@ Project Organization
     ├── data
     │   ├── external       <- Data from third party sources.
     │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
+    │   ├── processed      <- The final, canonical data sets for modelling.
     │   └── raw            <- The original, immutable data dump.
     │
     ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
@@ -43,7 +43,7 @@ Project Organization
     │   ├── data           <- Scripts to download or generate data
     │   │   └── make_dataset.py
     │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
+    │   ├── features       <- Scripts to turn raw data into features for modelling
     │   │   └── build_features.py
     │   │
     │   ├── models         <- Scripts to train models and then use trained models to make
