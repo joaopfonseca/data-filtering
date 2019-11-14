@@ -2,10 +2,10 @@ pixel_selection_test
 ==============================
 
 Testing my own noisy data selection method
----
+```
 # generate pickle with dictionary of numpy arrays
 python src/data/make_dataset.py data/raw/pixel_selection.db data/interim/pixel_selection.pkl
----
+```
 
 
 Project Organization
