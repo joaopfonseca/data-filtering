@@ -50,6 +50,7 @@ class KMeans_filtering(BaseCleaningSampler):
         for _, split_indices in skf.split(X, y_):
             splits.append(split_indices)
 
+        self.filter_list={}
         filter_outputs = {}
         for n, split in enumerate(splits):
             print(f'Applying filter {n}')
@@ -57,6 +58,7 @@ class KMeans_filtering(BaseCleaningSampler):
                 classifier = deepcopy(clf)
                 classifier.fit(X[split], y_[split])
                 filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
+                self.filter_list[f'{n}_{name}'] = classifier
                 print(f'Applied classifier {name} (part of filter {n})')
 
         ## mislabel rate
