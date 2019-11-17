@@ -7,7 +7,8 @@ from sklearn.model_selection import StratifiedKFold
 from imblearn.under_sampling.base import BaseCleaningSampler
 from copy import deepcopy
 
-class KMeans_filtering(BaseCleaningSampler):
+class MBKMeansFiltering(BaseCleaningSampler):
+    """My own method"""
     def __init__(self, filters, n_splits, granularity, method='obs_percent', threshold=0.7, random_state=None):
         assert method in ['obs_percent', 'mislabel_rate'], 'method must be either \'obs_percent\', \'mislabel_rate\''
         super().__init__(sampling_strategy='all')
@@ -19,8 +20,7 @@ class KMeans_filtering(BaseCleaningSampler):
         self.random_state = random_state
 
     def _fit_resample(self, X, y):
-        assert X.shape[0]==y.shape[0], 'X and y must have the same length.'
-
+        #assert X.shape[0]==y.shape[0], 'X and y must have the same length.'
         ## cluster data
         index = np.arange(len(y))
         clusters_list = []
@@ -104,6 +104,39 @@ class KMeans_filtering(BaseCleaningSampler):
         labels = kmeans.fit_predict(X).astype(str)
         return labels, kmeans
 
+
+
+class SingleFilter(BaseCleaningSampler):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filter, n_splits=4):
+        self.filter = filter
+        self.n_splits = n_splits
+
+class ConsensusFiltering(BaseCleaningSampler):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filters, n_splits=4):
+        self.filters = filters
+        self.n_splits = n_splits
+
+class MajorityFiltering(BaseCleaningSampler):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filters, n_splits=4):
+        self.filters = filters
+        self.n_splits = n_splits
+
+    def _fit_resample(self, X, y):
+        self.filter_list={}
+        splits = []
+        filter_outputs = {}
+        skf = StratifiedKFold(n_splits = n_splits, shuffle=True, random_state=random_state)
+        for n, (train_indices, test_indices) in enumerate(skf.split(X, y_)):
+            print(f'Applying filter {n}')
+            for name, clf in filters:
+                classifier = deepcopy(clf)
+                classifier.fit(X[split], y_[split])
+                filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
+                self.filter_list[f'{n}_{name}'] = classifier
+                print(f'Applied classifier {name} (part of filter {n})')
 
 
 
