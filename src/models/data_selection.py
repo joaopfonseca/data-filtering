@@ -12,7 +12,7 @@ class MBKMeansFiltering(BaseCleaningSampler):
     def __init__(self, filters, n_splits, granularity, method='obs_percent', threshold=0.7, random_state=None):
         assert method in ['obs_percent', 'mislabel_rate'], 'method must be either \'obs_percent\', \'mislabel_rate\''
         super().__init__(sampling_strategy='all')
-        self.filters = filters
+        self.filters = deepcopy(filters)
         self.n_splits = n_splits
         self.granularity = granularity
         self.method = method
@@ -45,16 +45,12 @@ class MBKMeansFiltering(BaseCleaningSampler):
         label_encoder = LabelEncoder()
         y_ = label_encoder.fit_transform(y)
 
-        skf = StratifiedKFold(n_splits = n_splits, shuffle=True, random_state=random_state)
-        splits = []
-        for _, split_indices in skf.split(X, y_):
-            splits.append(split_indices)
-
+        skf = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
         self.filter_list={}
         filter_outputs = {}
-        for n, split in enumerate(splits):
+        for n, (_, split) in enumerate(skf.split(X, y_)):
             print(f'Applying filter {n}')
-            for name, clf in filters:
+            for name, clf in self.filters:
                 classifier = deepcopy(clf)
                 classifier.fit(X[split], y_[split])
                 filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
@@ -104,59 +100,51 @@ class MBKMeansFiltering(BaseCleaningSampler):
         labels = kmeans.fit_predict(X).astype(str)
         return labels, kmeans
 
-
-
-class SingleFilter(BaseCleaningSampler):
+class EnsembleFiltering(BaseCleaningSampler):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filter, n_splits=4):
-        self.filter = filter
+    def __init__(self, filters, n_splits=4, threshold=0.5, random_state=None):
+        self.filters = deepcopy(filters)
         self.n_splits = n_splits
-
-class ConsensusFiltering(BaseCleaningSampler):
-    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filters, n_splits=4):
-        self.filters = filters
-        self.n_splits = n_splits
-
-class MajorityFiltering(BaseCleaningSampler):
-    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filters, n_splits=4):
-        self.filters = filters
-        self.n_splits = n_splits
+        self.threshold = threshold
+        self.random_state = random_state
 
     def _fit_resample(self, X, y):
-        self.filter_list={}
-        splits = []
-        filter_outputs = {}
-        skf = StratifiedKFold(n_splits = n_splits, shuffle=True, random_state=random_state)
+        ## run filter
+        self.filter_list = {}
+        indices = []
+        filter_outputs = {f'filter_{name}':np.zeros((y.shape))-1 for name, _ in self.filters}
+        skf = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=random_state)
         for n, (train_indices, test_indices) in enumerate(skf.split(X, y_)):
             print(f'Applying filter {n}')
-            for name, clf in filters:
+            for name, clf in self.filters:
                 classifier = deepcopy(clf)
-                classifier.fit(X[split], y_[split])
-                filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
+                classifier.fit(X[train_indices], y_[train_indices])
+                filter_outputs[f'filter_{name}'][test_indices] = classifier.predict(X[test_indices])
                 self.filter_list[f'{n}_{name}'] = classifier
                 print(f'Applied classifier {name} (part of filter {n})')
+        ## mislabel rate
+        total_filters = len(filter_outputs.keys())
+        mislabel_rate = (total_filters - \
+            np.apply_along_axis(
+                lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
+                .astype(int).sum(axis=1)
+                )/total_filters
+        ## filter data
+        self.status = mislabel_rate<=self.threshold
+        return X[self.status], y[self.status]
 
-
-
-
-
-def brodley_friedl_method(X, y, filters, n_splits):
+class ConsensusFiltering(EnsembleFiltering):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    filter_outputs = {}
-    for n, split in enumerate(splits):
-        print(f'Applying filter {n}')
-        for name, clf in filters:
-            classifier = deepcopy(clf)
-            classifier.fit(X[split], y_[split])
-            filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
-            print(f'Applied classifier {name} (part of filter {n})')
+    def __init__(self, filters, n_splits=4, random_state=None):
+        super().__init__(filters, n_splits=n_splits, threshold=1-.9e-15, random_state=random_state)
 
-    ## mislabel rate
-    total_filters = len(filter_outputs.keys())
-    mislabel_rate = (total_filters - \
-        np.apply_along_axis(
-            lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
-            .astype(int).sum(axis=1)
-            )/total_filters
+class MajorityVoteFiltering(EnsembleFiltering):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filters, n_splits=4, random_state=None):
+        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
+
+class SingleFilter(EnsembleFiltering):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filter, n_splits=4):
+        filters = [(filter.__class__, filter)]
+        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
