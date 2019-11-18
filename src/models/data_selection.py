@@ -191,7 +191,7 @@ class EnsembleFilter(BaseCleaningSampler):
         ## run filter
         self.filter_list = {}
         filter_outputs = {f'filter_{name}':np.zeros((y.shape))-1 for name, _ in self.filters}
-        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=random_state)
+        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
             print(f'Applying filter {n}')
             for name, clf in self.filters:
@@ -255,13 +255,14 @@ class CompositeFilter(BaseCleaningSampler):
         super().__init__(sampling_strategy='all')
         self.filters = filters
         self.method = method
+        self.n_splits = n_splits
         self.random_state = random_state
 
     def _fit_resample(self, X, y):
         if self.method.startswith('MF'): self.threshold_1 = .5
         else: self.threshold_1 = 1-.9e-15
 
-        if self.method.endsswith('MF'): self.threshold_2 = .5
+        if self.method.endswith('MF'): self.threshold_2 = .5
         else: self.threshold_2 = 1-.9e-15
 
         label_encoder = LabelEncoder()
@@ -271,7 +272,7 @@ class CompositeFilter(BaseCleaningSampler):
         self.filter_list = {}
         voted_outputs_1 = {}
         indices = []
-        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=random_state)
+        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
             print(f'Applying filter {n}')
             filter_outputs = {}
@@ -304,7 +305,7 @@ class CompositeFilter(BaseCleaningSampler):
         if self.method.startswith('MF'): self.threshold_1 = .5
         else: self.threshold_1 = 1-.9e-15
 
-        if self.method.endsswith('MF'): self.threshold_2 = .5
+        if self.method.endswith('MF'): self.threshold_2 = .5
         else: self.threshold_2 = 1-.9e-15
 
         label_encoder = LabelEncoder()
@@ -337,7 +338,7 @@ class ChainFilter(BaseCleaningSampler):
     """Own method"""
     def __init__(self, filter_obj, stopping_criteria='manual', tol=None, max_iter=40, random_state=None):
         assert stopping_criteria in ['auto', 'manual'],  '`stopping_criteria` must be either `auto` or `manual`'
-        assert tol if stopping_criteria=='auto', '`tol` must be defined while `stopping_criteria` is defined as `auto`'
+        if stopping_criteria=='auto': assert tol, '`tol` must be defined while `stopping_criteria` is defined as `auto`'
         self.filter_methods = [filter_obj for _ in range(max_iter)]
         self.random_state = random_state
         self.tol = tol
@@ -350,7 +351,7 @@ class ChainFilter(BaseCleaningSampler):
             filter = filter.fit(X_nnf, y_nnf)
             X_nnf, y_nnf = filter.resample(X, y)
             self.filter_list[n] = filter
-            if n!=0 and method='auto':
+            if n!=0 and method=='auto':
                 not_changed = dict(Counter(self.filter_list[n-1].status == self.filter_list[n].status))
                 percent_changes = not_changed[False]/sum(not_changed.values())
                 print(f'Percentage of status changes: {percent_changes*100}%')
@@ -372,11 +373,11 @@ class MajorityVoteFilter(EnsembleFilter):
 
 class SingleFilter(EnsembleFilter):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filter, n_splits=4):
-        filters = [(filter.__class__, filter)]
+    def __init__(self, filter, n_splits=4, random_state=None):
+        filters = [(filter.__class__.__name__, filter)]
         super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
 
-class YuanGuanZhu(CompositeFilter):
+class YuanGuanZhu(BaseCleaningSampler):
     """
     Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
     Filters used in paper: naive Bayes, decision tree, and 3-Nearest Neighbor
@@ -386,15 +387,20 @@ class YuanGuanZhu(CompositeFilter):
         assert method in ['majority', 'consensus'], '`method` must be either `majority` or `minority`.'
         if   method == 'majority':  method = 'MFMF'
         elif method == 'consensus': method = 'CFMF'
-        super().__init__(filters, method=method, n_splits=3, random_state=random_state)
+        super().__init__(sampling_strategy='all')
+        self.composite_filter = CompositeFilter(filters, method=method, n_splits=3, random_state=random_state)
         self.t = t
+        self.filters = filters
+        self.method = method
+        self.n_splits = 3
+        self.random_state = random_state
 
     def _fit_resample(self, X, y):
-        sss = StratifiedShuffleSplit(self.t, random_state=self.random_state)
-        sss.split(X, y)
+        _sfk = StratifiedKFold(n_splits = self.t, shuffle=True, random_state=self.random_state)
         statuses = np.zeros(y.shape)
-        for _, subset in sss.split(X, y):
-            super().fit(X[subset],y[subset])
-            statuses[subset] = self.status
+        for _, subset in _sfk.split(X, y):
+            compfilter = deepcopy(self.composite_filter)
+            compfilter.fit(X[subset],y[subset])
+            statuses[subset] = compfilter.status
         self.status = statuses
         return X[self.status], y[self.status]
