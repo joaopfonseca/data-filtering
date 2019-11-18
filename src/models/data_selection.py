@@ -8,7 +8,7 @@ from imblearn.under_sampling.base import BaseCleaningSampler
 from copy import deepcopy
 from collections import Counter
 
-class MBKMeansFiltering(BaseCleaningSampler):
+class MBKMeansFilter(BaseCleaningSampler):
     """My own method"""
     def __init__(self, filters, n_splits, granularity, method='obs_percent', threshold=0.7, random_state=None):
         assert method in ['obs_percent', 'mislabel_rate'], 'method must be either \'obs_percent\', \'mislabel_rate\''
@@ -171,7 +171,7 @@ class MBKMeansFiltering(BaseCleaningSampler):
         labels = kmeans.fit_predict(X).astype(str)
         return labels, kmeans
 
-class EnsembleFiltering(BaseCleaningSampler):
+class EnsembleFilter(BaseCleaningSampler):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
     def __init__(self, filters, n_splits=4, threshold=0.5, random_state=None):
         super().__init__(sampling_strategy='all')
@@ -329,23 +329,23 @@ class CompositeFilter(BaseCleaningSampler):
         self.status = mislabel_rate<=self.threshold_2
         return X[self.status], y[self.status]
 
-class ConsensusFiltering(EnsembleFiltering):
+class ConsensusFilter(EnsembleFilter):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
     def __init__(self, filters, n_splits=4, random_state=None):
         super().__init__(filters, n_splits=n_splits, threshold=1-.9e-15, random_state=random_state)
 
-class MajorityVoteFiltering(EnsembleFiltering):
+class MajorityVoteFilter(EnsembleFilter):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
     def __init__(self, filters, n_splits=4, random_state=None):
         super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
 
-class SingleFilter(EnsembleFiltering):
+class SingleFilter(EnsembleFilter):
     """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
     def __init__(self, filter, n_splits=4):
         filters = [(filter.__class__, filter)]
         super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
 
-class ChainFiltering(BaseCleaningSampler):
+class ChainFilter(BaseCleaningSampler):
     """Own method"""
     def __init__(self, filter_obj, stopping_criteria='manual', tol=None, max_iter=40, random_state=None):
         assert stopping_criteria in ['auto', 'manual'],  '`stopping_criteria` must be either `auto` or `manual`'
@@ -374,13 +374,13 @@ class ChainFiltering(BaseCleaningSampler):
 
 
 
-#class PartitionedFiltering:
+#class PartitionedFilter:
 #    """
 #    Based on "Novel mislabeled training data detection algorithm",
 #    Yuan, Guan, Zhu et al. (2018)
 #    """
 
-class YuanGuanZhu(ChainFiltering):
+class YuanGuanZhu(ChainFilter):
     """
     Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
     Filters used in paper: naive Bayes, decision tree, and 3-Nearest Neighbor
@@ -388,7 +388,7 @@ class YuanGuanZhu(ChainFiltering):
     def __init__(self, filters, n_splits=3, t=40, method='majority', random_state=None):
         """method: `majority` or `consensus`"""
         assert method in ['majority', 'consensus'], '`method` must be either `majority` or `minority`.'
-        filter_obj = [MajorityVoteFiltering() if method=='majority' else ConsensusFiltering()]
+        filter_obj = [MajorityVoteFilter() if method=='majority' else ConsensusFilter()]
         super().__init__()
         self.method = method
 
