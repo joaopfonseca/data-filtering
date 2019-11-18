@@ -3,7 +3,10 @@ import pandas as pd
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import (
+    StratifiedKFold,
+    StratifiedShuffleSplit
+)
 from imblearn.under_sampling.base import BaseCleaningSampler
 from copy import deepcopy
 from collections import Counter
@@ -246,12 +249,13 @@ class CompositeFilter(BaseCleaningSampler):
     def __init__(self, filters, method='MFMF', n_splits=4, random_state=None):
         assert  len(method)==4\
             and method[-2:] in ['MF', 'CF']\
-            and method[-2:] in ['MF', 'CF'], \
+            and method[:2] in ['MF', 'CF'], \
             'Invalid `method` value passed.'
 
         super().__init__(sampling_strategy='all')
         self.filters = filters
         self.method = method
+        self.random_state = random_state
 
     def _fit_resample(self, X, y):
         if self.method.startswith('MF'): self.threshold_1 = .5
@@ -329,22 +333,6 @@ class CompositeFilter(BaseCleaningSampler):
         self.status = mislabel_rate<=self.threshold_2
         return X[self.status], y[self.status]
 
-class ConsensusFilter(EnsembleFilter):
-    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filters, n_splits=4, random_state=None):
-        super().__init__(filters, n_splits=n_splits, threshold=1-.9e-15, random_state=random_state)
-
-class MajorityVoteFilter(EnsembleFilter):
-    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filters, n_splits=4, random_state=None):
-        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
-
-class SingleFilter(EnsembleFilter):
-    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
-    def __init__(self, filter, n_splits=4):
-        filters = [(filter.__class__, filter)]
-        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
-
 class ChainFilter(BaseCleaningSampler):
     """Own method"""
     def __init__(self, filter_obj, stopping_criteria='manual', tol=None, max_iter=40, random_state=None):
@@ -372,15 +360,23 @@ class ChainFilter(BaseCleaningSampler):
         self.final_filter = filter
         return X_nnf, y_nnf
 
+class ConsensusFilter(EnsembleFilter):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filters, n_splits=4, random_state=None):
+        super().__init__(filters, n_splits=n_splits, threshold=1-.9e-15, random_state=random_state)
 
+class MajorityVoteFilter(EnsembleFilter):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filters, n_splits=4, random_state=None):
+        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
 
-#class PartitionedFilter:
-#    """
-#    Based on "Novel mislabeled training data detection algorithm",
-#    Yuan, Guan, Zhu et al. (2018)
-#    """
+class SingleFilter(EnsembleFilter):
+    """Identifying Mislabeled Training Data, by Brodley and Friedl (1999)"""
+    def __init__(self, filter, n_splits=4):
+        filters = [(filter.__class__, filter)]
+        super().__init__(filters, n_splits=n_splits, threshold=.5, random_state=random_state)
 
-class YuanGuanZhu(ChainFilter):
+class YuanGuanZhu(CompositeFilter):
     """
     Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
     Filters used in paper: naive Bayes, decision tree, and 3-Nearest Neighbor
@@ -388,9 +384,17 @@ class YuanGuanZhu(ChainFilter):
     def __init__(self, filters, n_splits=3, t=40, method='majority', random_state=None):
         """method: `majority` or `consensus`"""
         assert method in ['majority', 'consensus'], '`method` must be either `majority` or `minority`.'
-        filter_obj = [MajorityVoteFilter() if method=='majority' else ConsensusFilter()]
-        super().__init__()
-        self.method = method
+        if   method == 'majority':  method = 'MFMF'
+        elif method == 'consensus': method = 'CFMF'
+        super().__init__(filters, method=method, n_splits=3, random_state=random_state)
+        self.t = t
 
     def _fit_resample(self, X, y):
-        pass
+        sss = StratifiedShuffleSplit(self.t, random_state=self.random_state)
+        sss.split(X, y)
+        statuses = np.zeros(y.shape)
+        for _, subset in sss.split(X, y):
+            super().fit(X[subset],y[subset])
+            statuses[subset] = self.status
+        self.status = statuses
+        return X[self.status], y[self.status]
