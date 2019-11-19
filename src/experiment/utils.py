@@ -4,6 +4,7 @@ import numpy as np
 
 class make_noise(BaseCleaningSampler):
     def __init__(self, noise_level, random_state):
+        super().__init__(sampling_strategy='all')
         self.noise_level  = noise_level
         self.random_state = random_state
 

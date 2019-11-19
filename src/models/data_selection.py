@@ -13,7 +13,7 @@ from collections import Counter
 
 class MBKMeansFilter(BaseCleaningSampler):
     """My own method"""
-    def __init__(self, filters, n_splits, granularity, method='obs_percent', threshold=0.7, random_state=None):
+    def __init__(self, filters, n_splits=5, granularity=5, method='obs_percent', threshold=0.5, random_state=None):
         assert method in ['obs_percent', 'mislabel_rate'], 'method must be either \'obs_percent\', \'mislabel_rate\''
         super().__init__(sampling_strategy='all')
         self.filters = deepcopy(filters)
