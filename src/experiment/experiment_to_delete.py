@@ -131,15 +131,15 @@ for clf_name in list(dict(pipelines).keys()):
     elif clf_name_split[1]!='no_filter':
         fit_params[f'{clf_name_split[1]}__filters'] = filters
 
-    model_search = ModelSearchCV(new_pipelines[clf_name], new_param_grid[clf_name], n_jobs=-1, cv=5, verbose=1)
+    model_search = ModelSearchCV(new_pipelines[clf_name], new_param_grid[clf_name], n_jobs=1, cv=5, verbose=1)
     model_search.fit(X,y, **fit_params)
     cv_results[clf_name] = model_search
 
+# n_splits: 4 , granularity: 3 , method: mislabel_rate , threshold: 0.1 , random_state: 2991312382
 
 all_results = {}
 for exp_name, results in cv_results.items():
     all_results[exp_name] = report_model_search_results(results)
-
 
 #model_search = ModelSearchCV(prepre_pipelines, pre_param_grid, n_jobs=-1, cv=5, verbose=1)
 #model_search.fit(X,y, **{'filters':filters})
