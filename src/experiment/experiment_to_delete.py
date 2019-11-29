@@ -9,13 +9,14 @@ from src.models.data_selection import (
     SingleFilter,
     ConsensusFilter,
     MajorityVoteFilter,
+    CompositeFilter,
     YuanGuanZhu,
     ChainFilter
 )
 
 from src.data.make_dataset import importdb
 from src.reporting.reports import reports
-from src.experiment.utils import make_noise
+from src.experiment.utils import make_binary_noise
 
 #from rlearn.tools.experiment import ImbalancedExperiment
 from rlearn.utils.validation import check_oversamplers_classifiers
@@ -31,7 +32,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 
 input_filepath='data/interim/pixel_selection.pkl'; noise_levels=[0.2]; random_state=123
-filters = (
+filts = (
     ('RandomForestClassifier', RandomForestClassifier(n_estimators=25, random_state=random_state)),
     ('RandomForestClassifier', RandomForestClassifier(n_estimators=10, random_state=random_state)),
     ('DecisionTreeClassifier', DecisionTreeClassifier(random_state=random_state)),
@@ -40,7 +41,7 @@ filters = (
 )
 single_filter = RandomForestClassifier(n_estimators=25, random_state=random_state)
 
-n_splits=7; granularity=3; threshold=0.5; method='mislabel_rate' # 'mislabel_rate'
+n_splits=4; granularity=3; threshold=0.5; method='mislabel_rate' # 'mislabel_rate'
 noise_level = 0.2
 
 ## save data objects
@@ -54,21 +55,20 @@ data = pickle.load(open(input_filepath, 'rb'))
 ## introduce noise
 noise_objs = [
     ('no_noise', None, {}),
-    ('noise', make_noise(), {'noise_level':[.05, .2]})#{'noise_level':[.05, .1, .2, .3, .4]})
+    ('noise', make_binary_noise(), {'noise_level':[.05, .2]})#{'noise_level':[.05, .1, .2, .3, .4]})
 ]
 
 data_filters = [
     ('no_filter', None, {}),
-    ('singlefilter', SingleFilter(), {}),
-    ('consensusfilter', ConsensusFilter(), {}),
-    ('majorityfilter', MajorityVoteFilter(), {}),
+    ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
+    ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
+    ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
     ('mymethod', MBKMeansFilter(),
             {
-            'n_splits':[4,6,10], 'granularity':[3,5,9],
+            'n_splits':[3,4,5,6,7,8], 'granularity':[3,5,9],
             'method':['obs_percent', 'mislabel_rate'],
-            'threshold':[.1, .5, .99]
-            }),
-    #('yuanguanzhu', YuanGuanZhu(filters), {})
+            'threshold':[.1, .25, .5, .75, .99]
+            })
 ]
 
 classifiers = [
@@ -120,7 +120,10 @@ for dictionary in param_grid:
     new_param_grid[new_dictionary['est_name'][0]].append(new_dictionary)
 
 
-
+# temp
+#df = pd.read_csv('../publications/remote-sensing-lucas/data/lucas.csv')
+#X, y = df.iloc[:,:-1].values, df.iloc[:,-1].values
+X, y = pickle.load(open(input_filepath, 'rb'))['YEAST 1 (3)'].values()
 
 cv_results = {}
 for clf_name in list(dict(pipelines).keys()):
@@ -129,13 +132,11 @@ for clf_name in list(dict(pipelines).keys()):
     if clf_name_split[1]=='singlefilter':
         fit_params[f'{clf_name_split[1]}__filters'] = [single_filter]
     elif clf_name_split[1]!='no_filter':
-        fit_params[f'{clf_name_split[1]}__filters'] = filters
+        fit_params[f'{clf_name_split[1]}__filters'] = filts
 
-    model_search = ModelSearchCV(new_pipelines[clf_name], new_param_grid[clf_name], n_jobs=1, cv=5, verbose=1)
+    model_search = ModelSearchCV(new_pipelines[clf_name], new_param_grid[clf_name], n_jobs=-1, cv=5, verbose=1)
     model_search.fit(X,y, **fit_params)
     cv_results[clf_name] = model_search
-
-# n_splits: 4 , granularity: 3 , method: mislabel_rate , threshold: 0.1 , random_state: 2991312382
 
 all_results = {}
 for exp_name, results in cv_results.items():
@@ -158,71 +159,81 @@ for exp_name, results in cv_results.items():
 
 
 
+### train baseline
+#rfc = RandomForestClassifier(n_estimators=100)
+#rfc.fit(X_noisy, y_train)
+#all_reports['rfc_noise'] = reports(y_test, rfc.predict(X_test), {0:0,1:1})
+#
+### train no noise
+#rfc_no_noise = RandomForestClassifier(n_estimators=100)
+#rfc_no_noise.fit(X_train_original, y_train_original)
+#all_reports['rfc_no_noise'] = reports(y_test, rfc_no_noise.predict(X_test), {0:0,1:1})
+#
+### run data selection
+## MBKMeansFilter, SingleFilter, ConsensusFilter, MajorityVoteFilter, YuanGuanZhu, ChainFilter
+#labels = {0: 'Correctly labelled', 1:'Noise'}
+## MBKMeansFilter
+#kmf = MBKMeansFilter(4, 5, method='mislabel_rate', threshold=0.7, random_state=None)
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(kmf, rfc)
+#clf.fit(X_train, y_train, **{'mbkmeansfilter__filters':filters})
+#all_reports['MBKMeansFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['MBKMeansFilter'] = reports(mask, ~dict(clf.steps)['MBKMeansFilter'.lower()].status, labels)
+#
+## SingleFilter
+#sf = SingleFilter(filters[0][-1], n_splits=4)
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(sf, rfc)
+#clf.fit(X_train, y_train)
+#all_reports['SingleFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['SingleFilter'] = reports(mask, ~dict(clf.steps)['SingleFilter'.lower()].status, labels)
+#
+## ConsensusFilter
+#CF = ConsensusFilter(filters)
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(CF, rfc)
+#clf.fit(X_train, y_train)
+#all_reports['ConsensusFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['ConsensusFilter'] = reports(mask, ~dict(clf.steps)['ConsensusFilter'.lower()].status, labels)
+#
+## MajorityVoteFilter
+#MF = MajorityVoteFilter(filters)
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(MF, rfc)
+#clf.fit(X_train, y_train)
+#all_reports['MajorityVoteFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['MajorityVoteFilter'] = reports(mask, ~dict(clf.steps)['MajorityVoteFilter'.lower()].status, labels)
 
-## train baseline
-rfc = RandomForestClassifier(n_estimators=100)
-rfc.fit(X_noisy, y_train)
-all_reports['rfc_noise'] = reports(y_test, rfc.predict(X_test), {0:0,1:1})
+####
+# these methods are not working, the code does not correspond to the description
+# of the algorithm in the paper. I could not understand its structure...
+####
 
-## train no noise
-rfc_no_noise = RandomForestClassifier(n_estimators=100)
-rfc_no_noise.fit(X_train_original, y_train_original)
-all_reports['rfc_no_noise'] = reports(y_test, rfc_no_noise.predict(X_test), {0:0,1:1})
-
-## run data selection
-# MBKMeansFilter, SingleFilter, ConsensusFilter, MajorityVoteFilter, YuanGuanZhu, ChainFilter
-labels = {0: 'Correctly labelled', 1:'Noise'}
-# MBKMeansFilter
-kmf = MBKMeansFilter(4, 5, method='mislabel_rate', threshold=0.7, random_state=None)
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(kmf, rfc)
-clf.fit(X_train, y_train, **{'mbkmeansfilter__filters':filters})
-all_reports['MBKMeansFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['MBKMeansFilter'] = reports(mask, ~dict(clf.steps)['MBKMeansFilter'.lower()].status, labels)
-
-# SingleFilter
-sf = SingleFilter(filters[0][-1], n_splits=4)
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(sf, rfc)
-clf.fit(X_train, y_train)
-all_reports['SingleFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['SingleFilter'] = reports(mask, ~dict(clf.steps)['SingleFilter'.lower()].status, labels)
-
-# ConsensusFilter
-CF = ConsensusFilter(filters)
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(CF, rfc)
-clf.fit(X_train, y_train)
-all_reports['ConsensusFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['ConsensusFilter'] = reports(mask, ~dict(clf.steps)['ConsensusFilter'.lower()].status, labels)
-
-# MajorityVoteFilter
-MF = MajorityVoteFilter(filters)
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(MF, rfc)
-clf.fit(X_train, y_train)
-all_reports['MajorityVoteFilter'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['MajorityVoteFilter'] = reports(mask, ~dict(clf.steps)['MajorityVoteFilter'.lower()].status, labels)
-
-# YuanGuanZhu Majority
-YGZM = YuanGuanZhu(filters, method='majority')
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(YGZM, rfc)
-clf.fit(X_train, y_train)
-all_reports['YuanGuanZhu Majority'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['YuanGuanZhu Majority'] = reports(mask, ~dict(clf.steps)['YuanGuanZhu'.lower()].status, labels)
-
-# YuanGuanZhu Consensus
-YGZC = YuanGuanZhu(filters, method='consensus')
-rfc = RandomForestClassifier(n_estimators=100)
-clf = make_pipeline(YGZC, rfc)
-clf.fit(X_train, y_train)
-all_reports['YuanGuanZhu Consensus'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
-selection_reports['YuanGuanZhu Consensus'] = reports(mask, ~dict(clf.steps)['YuanGuanZhu'.lower()].status, labels)
+## YuanGuanZhu Majority
+#YGZM = YuanGuanZhu(method='majority')
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(YGZM, rfc)
+#clf.fit(X, y, **{'yuanguanzhu__filters':filts})
+#all_reports['YuanGuanZhu Majority'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['YuanGuanZhu Majority'] = reports(mask, ~dict(clf.steps)['YuanGuanZhu'.lower()].status, labels)
+#
+## YuanGuanZhu Consensus
+#YGZC = YuanGuanZhu(filts, method='consensus')
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(YGZC, rfc)
+#clf.fit(X_train, y_train)
+#all_reports['YuanGuanZhu Consensus'] = reports(y_test, clf.predict(X_test), {0:0,1:1})
+#selection_reports['YuanGuanZhu Consensus'] = reports(mask, ~dict(clf.steps)['YuanGuanZhu'.lower()].status, labels)
+#
+## composite filter
+#compfilter = CompositeFilter()
+#rfc = RandomForestClassifier(n_estimators=100)
+#clf = make_pipeline(compfilter, rfc)
+#clf.fit(X, y, **{'compositefilter__filters':filts})
 
 
-scores = {}
-for name, reps in all_reports.items():
-    scores[name] = reps[-1]
-
-pd.concat(scores).reset_index().pivot('level_0','level_1','Score')
+#scores = {}
+#for name, reps in all_reports.items():
+#    scores[name] = reps[-1]
+#
+#pd.concat(scores).reset_index().pivot('level_0','level_1','Score')

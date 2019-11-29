@@ -1,3 +1,12 @@
+"""
+TODO:
+    - Rewrite Paris
+    - Random Forest filtering paper
+    - iForest
+    - OCSVM
+    - Fix bugs
+"""
+
 
 import pandas as pd
 import numpy as np
@@ -260,14 +269,13 @@ class CompositeFilter(BaseCleaningSampler):
     Yuan, Guan, Zhu et al. (2018).
     `method`: `MFMF`, `CFCF`, `CFMF`, `MFCF`
     """
-    def __init__(self, filters, method='MFMF', n_splits=4, random_state=None):
+    def __init__(self, method='MFMF', n_splits=4, random_state=None):
         assert  len(method)==4\
             and method[-2:] in ['MF', 'CF']\
             and method[:2] in ['MF', 'CF'], \
             'Invalid `method` value passed.'
 
         super().__init__(sampling_strategy='all')
-        self.filters = filters
         self.method = method
         self.n_splits = n_splits
         self.random_state = random_state
@@ -414,11 +422,15 @@ class YuanGuanZhu(BaseCleaningSampler):
         if   method == 'majority':  method = 'MFMF'
         elif method == 'consensus': method = 'CFMF'
         super().__init__(sampling_strategy='all')
-        self.composite_filter = CompositeFilter(filters, method=method, n_splits=3, random_state=random_state)
         self.t = t
         self.method = method
         self.n_splits = 3
         self.random_state = random_state
+        self.composite_filter = CompositeFilter(
+            method=self.method,
+            n_splits=self.n_splits,
+            random_state=self.random_state
+        )
 
     def _fit_resample(self, X, y, filters):
         self.filters = deepcopy(filters)
@@ -426,7 +438,7 @@ class YuanGuanZhu(BaseCleaningSampler):
         statuses = np.zeros(y.shape)
         for _, subset in _sfk.split(X, y):
             compfilter = deepcopy(self.composite_filter)
-            compfilter.fit(X[subset],y[subset])
+            compfilter.fit(X[subset],y[subset], self.filters)
             statuses[subset] = compfilter.status
         self.status = statuses
         return X[self.status], y[self.status]

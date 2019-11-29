@@ -2,7 +2,7 @@ from imblearn.under_sampling.base import BaseCleaningSampler
 import numpy as np
 
 
-class make_noise(BaseCleaningSampler):
+class make_binary_noise(BaseCleaningSampler):
     def __init__(self, noise_level=None, random_state=None):
         super().__init__(sampling_strategy='all')
         self.noise_level  = noise_level
