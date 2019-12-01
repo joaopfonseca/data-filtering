@@ -34,19 +34,16 @@ class MBKMeansFilter(BaseCleaningSampler):
     def _fit_resample(self, X, y, filters):
         #assert X.shape[0]==y.shape[0], 'X and y must have the same length.'
         ## cluster data
-        print('n_splits:', self.n_splits, ', granularity:', self.granularity, ', method:', self.method, ', threshold:', self.threshold, ', random_state:', self.random_state)
+        #print('n_splits:', self.n_splits, ', granularity:', self.granularity, ', method:', self.method, ', threshold:', self.threshold, ', random_state:', self.random_state)
         self.filters = deepcopy(filters)
         index = np.arange(len(y))
         clusters_list = []
         index_list  = []
         self.kmeans = {}
         for analysis_label in np.unique(y):
-            #print(f'Label: {analysis_label}')
             label_indices = index[y==analysis_label]
             X_label = X[y==analysis_label]
-            print(X_label.shape, label_indices.shape)
             clusters, kmeans = self._KMeans_clustering(X_label)
-            print('Checkpoint')
             self.kmeans[analysis_label] = kmeans
             index_list.append(label_indices)
             clusters_list.append(clusters)
@@ -66,17 +63,11 @@ class MBKMeansFilter(BaseCleaningSampler):
         self.filter_list = {}
         filter_outputs   = {}
         for n, (_, split) in enumerate(self.stratifiedkfold.split(X, y_)):
-            #print(f'Applying filter {n}')
             for name, clf in self.filters:
-                try:
-                    classifier = deepcopy(clf)
-                    classifier.fit(X[split], y_[split])
-                    filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
-                    self.filter_list[f'{n}_{name}'] = classifier
-                except ValueError:
-                    print('Found array with 0 sample(s) (shape=(0, 9)) while a minimum of 1 is required.')
-                    print('skipping training on this subset')
-                #print(f'Applied classifier {name} (part of filter {n})')
+                classifier = deepcopy(clf)
+                classifier.fit(X[split], y_[split])
+                filter_outputs[f'filter_{n}_{name}'] = classifier.predict(X)
+                self.filter_list[f'{n}_{name}'] = classifier
 
         ## mislabel rate
         total_filters = len(filter_outputs.keys())
@@ -117,12 +108,10 @@ class MBKMeansFilter(BaseCleaningSampler):
         return self
 
     def resample(self, X, y):
-        #print('Resampling... (check if this happens when using predict method on a pipeline, it shouldn\'t)')
         index = np.arange(len(y))
         clusters_list = []
         index_list  = []
         for analysis_label in np.unique(y):
-            #print(f'Label: {analysis_label}')
             label_indices = index[y==analysis_label]
             X_label = X[y==analysis_label]
 
@@ -144,7 +133,6 @@ class MBKMeansFilter(BaseCleaningSampler):
         filter_outputs   = {}
         for name, classifier in self.filter_list.items():
             filter_outputs[f'filter_{name}'] = classifier.predict(X)
-            #print(f'Applied classifier {name.split("_")[-1]} (part of filter {name.split("_")[0]})')
 
         ## mislabel rate
         total_filters = len(filter_outputs.keys())
@@ -180,15 +168,12 @@ class MBKMeansFilter(BaseCleaningSampler):
         return X[self.status], y[self.status]
 
     def fit_resample(self, X, y, filters):
-        #print(filters)
-        #print(type(filters))
         return self._fit_resample(X, y, filters)
 
     def _KMeans_clustering(self, X):
         """Private function to..."""
         if self.granularity>=np.sqrt(X.shape[0]):
             self.granularity=int(np.sqrt(X.shape[0]))-1
-            #print(f'Granularity too high for passed array, clipping to {self.granularity}')
         k = int(self.granularity*np.sqrt(X.shape[0]))
         kmeans = MiniBatchKMeans(k, max_iter=5*k, tol=0, max_no_improvement=400, random_state=self.random_state)
         labels = kmeans.fit_predict(X).astype(str)
@@ -213,13 +198,11 @@ class EnsembleFilter(BaseCleaningSampler):
         filter_outputs = {f'filter_{name}':np.zeros((y.shape))-1 for name, _ in self.filters}
         self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            #print(f'Applying filter {n}')
             for name, clf in self.filters:
                 classifier = deepcopy(clf)
                 classifier.fit(X[train_indices], y_[train_indices])
                 filter_outputs[f'filter_{name}'][test_indices] = classifier.predict(X[test_indices])
                 self.filter_list[f'{n}_{name}'] = classifier
-                #print(f'Applied classifier {name} (part of filter {n})')
         ## mislabel rate
         total_filters = len(filter_outputs.keys())
         mislabel_rate = (total_filters - \
@@ -244,11 +227,9 @@ class EnsembleFilter(BaseCleaningSampler):
         indices = []
         filter_outputs = {f'filter_{name}':np.zeros((y.shape))-1 for name, _ in self.filters}
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            #print(f'Applying filter {n}')
             for name in dict(self.filters).keys():
                 filter_outputs[name][test_indices] = self.filter_list[f'{n}_{name}'].predict(X[test_indices])
 
-                #print(f'Applied classifier {name} (part of filter {n})')
         ## mislabel rate
         total_filters = len(filter_outputs.keys())
         mislabel_rate = (total_filters - \
@@ -297,14 +278,12 @@ class CompositeFilter(BaseCleaningSampler):
         indices = []
         self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            #print(f'Applying filter {n}')
             filter_outputs = {}
             for name, clf in self.filters:
                 classifier = deepcopy(clf)
                 classifier.fit(X[train_indices], y_[train_indices])
                 filter_outputs[f'filter_{name}'] = classifier.predict(X)
                 self.filter_list[f'{n}_{name}'] = classifier
-                #print(f'Applied classifier {name} (part of filter {n})')
             total_filters = len(filter_outputs.keys())
             voted_outputs_1[n] = ((total_filters - \
                 np.apply_along_axis(
@@ -337,7 +316,6 @@ class CompositeFilter(BaseCleaningSampler):
         ## run filter
         voted_outputs_1 = {}
         for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            #print(f'Applying filter {n}')
             filter_outputs = {}
             for name, clf in self.filters:
                 filter_outputs[f'filter_{name}'] = self.filter_list[f'{n}_{name}'].predict(X)

@@ -31,7 +31,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 
-input_filepath='data/interim/pixel_selection.pkl'; noise_levels=[0.2]; random_state=123
+input_filepath='data/interim/pixel_selection.pkl'; random_state=12
 filts = (
     ('RandomForestClassifier', RandomForestClassifier(n_estimators=25, random_state=random_state)),
     ('RandomForestClassifier', RandomForestClassifier(n_estimators=10, random_state=random_state)),
@@ -55,21 +55,32 @@ data = pickle.load(open(input_filepath, 'rb'))
 ## introduce noise
 noise_objs = [
     ('no_noise', None, {}),
-    ('noise', make_binary_noise(), {'noise_level':[.05, .2]})#{'noise_level':[.05, .1, .2, .3, .4]})
+    ('noise5', make_binary_noise(noise_level=.05), {}),#{'noise_level':[.05, .1, .2, .3, .4]})
+    ('noise20', make_binary_noise(noise_level=.2), {})
 ]
+
+#data_filters = [
+#    ('no_filter', None, {}),
+#    ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('mymethod', MBKMeansFilter(),
+#            {
+#            'n_splits':[3,4,5,6,7,8], 'granularity':[3,5,9],
+#            'method':['obs_percent', 'mislabel_rate'],
+#            'threshold':[.1, .25, .5, .75, .99]
+#            })
+#]
 
 data_filters = [
     ('no_filter', None, {}),
-    ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('mymethod', MBKMeansFilter(),
-            {
-            'n_splits':[3,4,5,6,7,8], 'granularity':[3,5,9],
-            'method':['obs_percent', 'mislabel_rate'],
-            'threshold':[.1, .25, .5, .75, .99]
-            })
+    ('singlefilter', SingleFilter(), {}),
+    ('consensusfilter', ConsensusFilter(), {}),
+    ('majorityfilter', MajorityVoteFilter(), {}),
+    ('mymethod', MBKMeansFilter(granularity=7, method='mislabel_rate',threshold=.99),
+            {})
 ]
+
 
 classifiers = [
     ('randomforestclassifier', RandomForestClassifier(n_estimators=100, random_state=random_state), {})
@@ -121,9 +132,9 @@ for dictionary in param_grid:
 
 
 # temp
-#df = pd.read_csv('../publications/remote-sensing-lucas/data/lucas.csv')
-#X, y = df.iloc[:,:-1].values, df.iloc[:,-1].values
-X, y = pickle.load(open(input_filepath, 'rb'))['YEAST 1 (3)'].values()
+df = pd.read_csv('../publications/remote-sensing-lucas/data/lucas.csv')
+X, y = df.iloc[:,:-1].values, df.iloc[:,-1].values
+#X, y = pickle.load(open(input_filepath, 'rb'))['YEAST 1 (3)'].values()
 
 cv_results = {}
 for clf_name in list(dict(pipelines).keys()):
@@ -142,16 +153,24 @@ all_results = {}
 for exp_name, results in cv_results.items():
     all_results[exp_name] = report_model_search_results(results)
 
-#model_search = ModelSearchCV(prepre_pipelines, pre_param_grid, n_jobs=-1, cv=5, verbose=1)
-#model_search.fit(X,y, **{'filters':filters})
+results = pd.concat(all_results.values())
+results.sort_values('mean_test_score', ascending=False)
 
 
 
 
 
 
-
-
+### pseudo-replicate experiment
+kmf = MBKMeansFilter(granularity=7, method='obs_percent', threshold=1, random_state=662124363)
+noise5 = make_binary_noise(noise_level=.05, random_state=662124363)
+rfc = RandomForestClassifier(n_estimators=100, random_state=662124363)
+X_train, X_test, y_train, y_test = train_test_split(X, y)
+X_noisy, y_noisy = noise5.fit_resample(X_train, y_train)
+X_filtered, y_filtered = kmf.fit_resample(X_noisy, y_noisy, filts)
+rfc.fit(X_filtered, y_filtered)
+y_pred = rfc.predict(X_test)
+reports(y_test, y_pred, {k:k for k in np.unique(y)})
 
 
 
