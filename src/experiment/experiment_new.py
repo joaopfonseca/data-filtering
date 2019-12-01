@@ -36,7 +36,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 
 ## read data
-df = pd.read_csv('../publications/remote-sensing-lucas/data/lucas.csv')
+df = pd.read_csv('data/raw/lucas.csv')
 X, y = df.iloc[:,:-1].values, df.iloc[:,-1].values
 X = X[~np.isin(y, [5,6,7])]
 y = y[~np.isin(y, [5,6,7])]
