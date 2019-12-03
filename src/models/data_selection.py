@@ -5,6 +5,7 @@ TODO:
     - iForest
     - OCSVM
     - Fix bugs
+    - If threshold is too high to reject all pixels, send warning and return full dataset
 """
 
 
