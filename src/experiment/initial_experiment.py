@@ -78,22 +78,13 @@ data_filters = [
     ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
     ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
     ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
-#    ('mymethod', MBKMeansFilter(),
-#            {
-#            'n_splits':[3,4,5,6,7], 'granularity':[3,5,7],
-#            'method':['obs_percent', 'mislabel_rate'],
-#            'threshold':[.1, .25, .5, .75, .99]
-#            })
+    ('mymethod', MBKMeansFilter(),
+            {
+            'n_splits':[3,4,5,6,7], 'granularity':[3,4,5,6,7],
+            'method':['obs_percent', 'mislabel_rate'],
+            'threshold':[.25, .33, .5, .66, .75, .99]
+            })
 ]
-
-#data_filters = [
-#    ('no_filter', None, {}),
-#    ('singlefilter', SingleFilter(), {}),
-#    ('consensusfilter', ConsensusFilter(), {}),
-#    ('majorityfilter', MajorityVoteFilter(), {}),
-#    ('mymethod', MBKMeansFilter(granularity=7, method='mislabel_rate',threshold=.99),
-#            {})
-#]
 
 classifiers = [
     ('randomforestclassifier', RandomForestClassifier(n_estimators=100, random_state=random_state), {})
@@ -102,8 +93,7 @@ classifiers = [
 
 def check_pipelines(objects_list, random_state, n_runs):
     """
-    TODO: random_state generator.
-    See https://github.com/AlgoWit/research-learn/blob/master/rlearn/utils/validation.py#L72
+    TODO: check if random state generation is producing the expected outcomes
     """
     # Create random states
     random_states = check_random_states(random_state, n_runs)

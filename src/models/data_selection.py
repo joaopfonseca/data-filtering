@@ -5,7 +5,7 @@ TODO:
     - iForest
     - OCSVM
     - Fix bugs
-    - If threshold is too high to reject all pixels, send warning and return full dataset
+    - If threshold is too low to reject all pixels, send warning and return minimum dataset
 """
 
 
@@ -99,7 +99,14 @@ class MBKMeansFilter(BaseCleaningSampler):
                 ]['cumsum'].groupby('y').min()
             df_cluster_info['status'] = df_cluster_info['cumsum']/actual_thresholds<=1
 
+        # always accept cluster with lowest mislabel rate for each class by default
+        index_keys = df_cluster_info.reset_index().groupby('y').apply(
+            lambda x: x.sort_values('mislabel_rate').iloc[0]
+            )[['y','cluster']].values
+        df_cluster_info.loc[[tuple(i) for i in index_keys], 'status'] = True
+
         results = df.join(df_cluster_info['status'], on=['y','cluster'])
+
         self.status = results['status'].values
         return X[self.status], y[self.status]
 
@@ -163,6 +170,12 @@ class MBKMeansFilter(BaseCleaningSampler):
                     df_cluster_info['cumsum']/thresholds>=1
                 ]['cumsum'].groupby('y').min()
             df_cluster_info['status'] = df_cluster_info['cumsum']/actual_thresholds<=1
+
+        # always accept cluster with lowest mislabel rate for each class by default
+        index_keys = df_cluster_info.reset_index().groupby('y').apply(
+            lambda x: x.sort_values('mislabel_rate').iloc[0]
+            )[['y','cluster']].values
+        df_cluster_info.loc[[tuple(i) for i in index_keys], 'status'] = True
 
         results = df.join(df_cluster_info['status'], on=['y','cluster'])
         self.status = results['status'].values
