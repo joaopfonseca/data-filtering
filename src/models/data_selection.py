@@ -189,6 +189,7 @@ class MBKMeansFilter(BaseCleaningSampler):
         if self.granularity>=np.sqrt(X.shape[0]):
             self.granularity=int(np.sqrt(X.shape[0]))-1
         k = int(self.granularity*np.sqrt(X.shape[0]))
+        k = k if k>=1 else 1
         kmeans = MiniBatchKMeans(k, max_iter=5*k, tol=0, max_no_improvement=400, random_state=self.random_state)
         labels = kmeans.fit_predict(X).astype(str)
         return labels, kmeans
