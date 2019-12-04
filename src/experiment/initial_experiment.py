@@ -58,7 +58,7 @@ filts = (
     ('RandomForestClassifier', RandomForestClassifier(n_estimators=10, random_state=random_state)),
     ('DecisionTreeClassifier', DecisionTreeClassifier(random_state=random_state)),
     ('LogisticRegression', LogisticRegression(solver='lbfgs', random_state=random_state, multi_class='auto', max_iter=750)),
-    ('MLPClassifier', MLPClassifier(random_state=random_state, max_iter=1700))
+    ('MLPClassifier', MLPClassifier(random_state=random_state, max_iter=2000))
 )
 single_filter = RandomForestClassifier(n_estimators=25, random_state=random_state)
 
@@ -80,9 +80,9 @@ data_filters = [
     ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
     ('mymethod', MBKMeansFilter(),
             {
-            'n_splits':[3,4,5,6,7], 'granularity':[3,4,5,6,7],
+            'n_splits':[3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
             'method':['obs_percent', 'mislabel_rate'],
-            'threshold':[.25, .33, .5, .66, .75, .99]
+            'threshold':[.25, .5, .75, .99]
             })
 ]
 
@@ -132,7 +132,7 @@ for clf_name in list(dict(pipelines).keys()):
         fit_params[f'{clf_name_split[1]}__filters'] = filts
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-model_search = ModelSearchCV(pipelines, param_grid, n_jobs=-1, cv=cv, verbose=2)
+model_search = ModelSearchCV(pipelines, param_grid, n_jobs=-1, cv=cv, verbose=1)
 model_search.fit(X,y,**fit_params)
 df_results = report_model_search_results(model_search)\
     .sort_values('mean_test_score', ascending=False)

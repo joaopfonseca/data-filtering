@@ -362,6 +362,7 @@ class ChainFilter(BaseCleaningSampler):
         self.random_state = random_state
         self.tol = tol
         self.max_iter = max_iter
+        self.stopping_criteria = stopping_criteria
 
     def _fit_resample(self, X, y, filters):
         self.filters = deepcopy(filters)
@@ -371,10 +372,10 @@ class ChainFilter(BaseCleaningSampler):
             filter = filter.fit(X_nnf, y_nnf, self.filters)
             X_nnf, y_nnf = filter.resample(X, y)
             self.filter_list[n] = filter
-            if n!=0 and method=='auto':
+            if n!=0 and self.stopping_criteria=='auto':
                 not_changed = dict(Counter(self.filter_list[n-1].status == self.filter_list[n].status))
                 percent_changes = not_changed[False]/sum(not_changed.values())
-                #print(f'Percentage of status changes: {percent_changes*100}%')
+                print(f'Percentage of status changes: {percent_changes*100}%')
                 if percent_changes<=self.tol:
                     break
 
