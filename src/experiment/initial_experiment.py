@@ -12,7 +12,8 @@ from src.models.data_selection import (
     MajorityVoteFilter,
     CompositeFilter,
     YuanGuanZhu,
-    ChainFilter
+    ChainFilter,
+    MBKMeansFilter_reversed
 )
 
 from src.data.make_dataset import importdb
@@ -81,6 +82,12 @@ data_filters = [
     ('mymethod', MBKMeansFilter(),
             {
             'n_splits':[3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
+            'method':['obs_percent', 'mislabel_rate'],
+            'threshold':[.25, .5, .75, .99]
+            })
+    ('mymethod', MBKMeansFilter_reversed(),
+            {
+            'n_splits':[1,1.5,2,3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
             'method':['obs_percent', 'mislabel_rate'],
             'threshold':[.25, .5, .75, .99]
             })

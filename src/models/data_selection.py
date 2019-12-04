@@ -405,6 +405,8 @@ class SingleFilter(EnsembleFilter):
         else: filters = [(filters.__class__.__name__,filters)]
         return super()._fit_resample(X, y, filters)
 
+# Algorithms that require testing/debugging/edition
+
 class YuanGuanZhu(BaseCleaningSampler):
     """
     Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
@@ -439,3 +441,176 @@ class YuanGuanZhu(BaseCleaningSampler):
 
     def fit_resample(self, X, y, filters):
         return self._fit_resample(X, y, filters)
+
+class MBKMeansFilter_reversed(BaseCleaningSampler):
+    """My own method"""
+    def __init__(self, n_splits=5, granularity=5, method='obs_percent', threshold=0.5, random_state=None):
+        assert method in ['obs_percent', 'mislabel_rate'], 'method must be either \'obs_percent\', \'mislabel_rate\''
+        super().__init__(sampling_strategy='all')
+        self.n_splits = n_splits
+        self.granularity = granularity
+        self.method = method
+        self.threshold = threshold
+        self.random_state = random_state
+
+    def _fit_resample(self, X, y, filters):
+        #assert X.shape[0]==y.shape[0], 'X and y must have the same length.'
+        ## cluster data
+        #print('n_splits:', self.n_splits, ', granularity:', self.granularity, ', method:', self.method, ', threshold:', self.threshold, ', random_state:', self.random_state)
+        self.filters = deepcopy(filters)
+        index = np.arange(len(y))
+        clusters_list = []
+        index_list  = []
+        self.kmeans = {}
+        for analysis_label in np.unique(y):
+            label_indices = index[y==analysis_label]
+            X_label = X[y==analysis_label]
+            clusters, kmeans = self._KMeans_clustering(X_label)
+            self.kmeans[analysis_label] = kmeans
+            index_list.append(label_indices)
+            clusters_list.append(clusters)
+
+        ## cluster labels
+        cluster_col = pd.Series(
+            data=np.concatenate(clusters_list),
+            index=np.concatenate(index_list),
+            name='cluster')\
+            .sort_index()
+
+        ## apply filters
+        label_encoder = LabelEncoder()
+        y_ = label_encoder.fit_transform(y)
+
+        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
+        self.filter_list = {}
+        filter_outputs   = {f'filter_{name}':np.zeros((y.shape))-1 for name, _ in self.filters}
+        for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
+            for name, clf in self.filters:
+                classifier = deepcopy(clf)
+                classifier.fit(X[train_indices], y_[train_indices])
+                filter_outputs[f'filter_{name}'][test_indices] = classifier.predict(X[test_indices])
+                self.filter_list[f'{n}_{name}'] = classifier
+
+        ## mislabel rate
+        total_filters = len(filter_outputs.keys())
+        mislabel_rate = (total_filters - \
+            np.apply_along_axis(
+                lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
+                .astype(int).sum(axis=1)
+                )/total_filters
+
+        ## crunch data
+        mislabel_col = pd.Series(data=mislabel_rate, index=index, name='mislabel_rate')
+        y_col = pd.Series(data=y, index=index, name='y')
+        df = cluster_col.to_frame().join(y_col).join(mislabel_col)
+        df['count'] = 1
+        df_cluster_info_grouped = df.groupby(['y', 'cluster'])\
+                    .agg({'mislabel_rate':np.mean, 'count':'count'})\
+                    .sort_values(['mislabel_rate'])
+        df_cluster_info_A = df_cluster_info_grouped.groupby(['y']).cumsum()\
+            .rename(columns={'count':'cumsum'}).drop(columns=['mislabel_rate'])
+        df_cluster_info = df_cluster_info_grouped.join(df_cluster_info_A)
+
+        if self.method=='mislabel_rate':
+            df_cluster_info['status'] = df_cluster_info['mislabel_rate']<=self.threshold
+        elif self.method=='obs_percent':
+            thresholds = df_cluster_info.groupby('y').max()['cumsum']*self.threshold
+            actual_thresholds = df_cluster_info[
+                    df_cluster_info['cumsum']/thresholds>=1
+                ]['cumsum'].groupby('y').min()
+            df_cluster_info['status'] = df_cluster_info['cumsum']/actual_thresholds<=1
+
+        # always accept cluster with lowest mislabel rate for each class by default
+        index_keys = df_cluster_info.reset_index().groupby('y').apply(
+            lambda x: x.sort_values('mislabel_rate').iloc[0]
+            )[['y','cluster']].values
+        df_cluster_info.loc[[tuple(i) for i in index_keys], 'status'] = True
+
+        results = df.join(df_cluster_info['status'], on=['y','cluster'])
+
+        self.status = results['status'].values
+        return X[self.status], y[self.status]
+
+    def fit(self, X, y, filters):
+        """Fits filter to X, y."""
+        self._fit_resample(X, y, filters)
+        return self
+
+    def resample(self, X, y):
+        index = np.arange(len(y))
+        clusters_list = []
+        index_list  = []
+        for analysis_label in np.unique(y):
+            label_indices = index[y==analysis_label]
+            X_label = X[y==analysis_label]
+
+            clusters = self.kmeans[analysis_label].predict(X_label)
+            index_list.append(label_indices)
+            clusters_list.append(clusters)
+
+        ## cluster labels
+        cluster_col = pd.Series(
+            data=np.concatenate(clusters_list),
+            index=np.concatenate(index_list),
+            name='cluster')\
+            .sort_index()
+
+        ## apply filters
+        label_encoder = LabelEncoder()
+        y_ = label_encoder.fit_transform(y)
+
+        filter_outputs   = {}
+        for name, classifier in self.filter_list.items():
+            filter_outputs[f'filter_{name}'] = classifier.predict(X)
+
+        ## mislabel rate
+        total_filters = len(filter_outputs.keys())
+        mislabel_rate = (total_filters - \
+            np.apply_along_axis(
+                lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
+                .astype(int).sum(axis=1)
+                )/total_filters
+
+        ## crunch data
+        mislabel_col = pd.Series(data=mislabel_rate, index=index, name='mislabel_rate')
+        y_col = pd.Series(data=y, index=index, name='y')
+        df = cluster_col.to_frame().join(y_col).join(mislabel_col)
+        df['count'] = 1
+        df_cluster_info_grouped = df.groupby(['y', 'cluster'])\
+                    .agg({'mislabel_rate':np.mean, 'count':'count'})\
+                    .sort_values(['mislabel_rate'])
+        df_cluster_info_A = df_cluster_info_grouped.groupby(['y']).cumsum()\
+            .rename(columns={'count':'cumsum'}).drop(columns=['mislabel_rate'])
+        df_cluster_info = df_cluster_info_grouped.join(df_cluster_info_A)
+
+        if self.method=='mislabel_rate':
+            df_cluster_info['status'] = df_cluster_info['mislabel_rate']<=self.threshold
+        elif self.method=='obs_percent':
+            thresholds = df_cluster_info.groupby('y').max()['cumsum']*self.threshold
+            actual_thresholds = df_cluster_info[
+                    df_cluster_info['cumsum']/thresholds>=1
+                ]['cumsum'].groupby('y').min()
+            df_cluster_info['status'] = df_cluster_info['cumsum']/actual_thresholds<=1
+
+        # always accept cluster with lowest mislabel rate for each class by default
+        index_keys = df_cluster_info.reset_index().groupby('y').apply(
+            lambda x: x.sort_values('mislabel_rate').iloc[0]
+            )[['y','cluster']].values
+        df_cluster_info.loc[[tuple(i) for i in index_keys], 'status'] = True
+
+        results = df.join(df_cluster_info['status'], on=['y','cluster'])
+        self.status = results['status'].values
+        return X[self.status], y[self.status]
+
+    def fit_resample(self, X, y, filters):
+        return self._fit_resample(X, y, filters)
+
+    def _KMeans_clustering(self, X):
+        """Private function to..."""
+        if self.granularity>=np.sqrt(X.shape[0]):
+            self.granularity=int(np.sqrt(X.shape[0]))-1
+        k = int(self.granularity*np.sqrt(X.shape[0]))
+        k = k if k>=1 else 1
+        kmeans = MiniBatchKMeans(k, max_iter=5*k, tol=0, max_no_improvement=400, random_state=self.random_state)
+        labels = kmeans.fit_predict(X).astype(str)
+        return labels, kmeans
