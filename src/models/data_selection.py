@@ -259,100 +259,6 @@ class EnsembleFilter(BaseCleaningSampler):
     def fit_resample(self, X, y, filters):
         return self._fit_resample(X, y, filters)
 
-class CompositeFilter(BaseCleaningSampler):
-    """
-    Based on "Novel mislabeled training data detection algorithm",
-    Yuan, Guan, Zhu et al. (2018).
-    `method`: `MFMF`, `CFCF`, `CFMF`, `MFCF`
-    """
-    def __init__(self, method='MFMF', n_splits=4, random_state=None):
-        assert  len(method)==4\
-            and method[-2:] in ['MF', 'CF']\
-            and method[:2] in ['MF', 'CF'], \
-            'Invalid `method` value passed.'
-
-        super().__init__(sampling_strategy='all')
-        self.method = method
-        self.n_splits = n_splits
-        self.random_state = random_state
-
-    def _fit_resample(self, X, y, filters):
-        self.filters = deepcopy(filters)
-        if self.method.startswith('MF'): self.threshold_1 = .5
-        else: self.threshold_1 = 1-.9e-15
-
-        if self.method.endswith('MF'): self.threshold_2 = .5
-        else: self.threshold_2 = 1-.9e-15
-
-        label_encoder = LabelEncoder()
-        y_ = label_encoder.fit_transform(y)
-
-        ## run filter
-        self.filter_list = {}
-        voted_outputs_1 = {}
-        indices = []
-        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
-        for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            filter_outputs = {}
-            for name, clf in self.filters:
-                classifier = deepcopy(clf)
-                classifier.fit(X[train_indices], y_[train_indices])
-                filter_outputs[f'filter_{name}'] = classifier.predict(X)
-                self.filter_list[f'{n}_{name}'] = classifier
-            total_filters = len(filter_outputs.keys())
-            voted_outputs_1[n] = ((total_filters - \
-                np.apply_along_axis(
-                    lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
-                    .astype(int).sum(axis=1)
-                    )/total_filters) <= self.threshold_1
-
-        ## mislabel rate
-        total_votes = len(voted_outputs_1.keys())
-        mislabel_rate = (pd.DataFrame(voted_outputs_1).values\
-                .astype(int).sum(axis=1))/total_votes
-        ## filter data
-        self.status = mislabel_rate<=self.threshold_2
-        return X[self.status], y[self.status]
-
-    def fit(self, X, y, filters):
-        self._fit_resample(X, y, filters)
-        return self
-
-    def resample(self, X, y):
-        if self.method.startswith('MF'): self.threshold_1 = .5
-        else: self.threshold_1 = 1-.9e-15
-
-        if self.method.endswith('MF'): self.threshold_2 = .5
-        else: self.threshold_2 = 1-.9e-15
-
-        label_encoder = LabelEncoder()
-        y_ = label_encoder.fit_transform(y)
-
-        ## run filter
-        voted_outputs_1 = {}
-        for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
-            filter_outputs = {}
-            for name, clf in self.filters:
-                filter_outputs[f'filter_{name}'] = self.filter_list[f'{n}_{name}'].predict(X)
-
-            total_filters = len(filter_outputs.keys())
-            voted_outputs_1[n] = ((total_filters - \
-                np.apply_along_axis(
-                    lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
-                    .astype(int).sum(axis=1)
-                    )/total_filters) <= self.threshold_1
-
-        ## mislabel rate
-        total_votes = len(voted_outputs_1.keys())
-        mislabel_rate = (pd.DataFrame(voted_outputs_1).values\
-                .astype(int).sum(axis=1))/total_votes
-        ## filter data
-        self.status = mislabel_rate<=self.threshold_2
-        return X[self.status], y[self.status]
-
-    def fit_resample(self, X, y, filters):
-        return self._fit_resample(X, y, filters)
-
 class ChainFilter(BaseCleaningSampler):
     """Own method"""
     def __init__(self, filter_obj, stopping_criteria='manual', tol=None, max_iter=40, random_state=None):
@@ -404,43 +310,6 @@ class SingleFilter(EnsembleFilter):
         if type(filters)==list: filters = [(filters[0].__class__.__name__,filters[0])]
         else: filters = [(filters.__class__.__name__,filters)]
         return super()._fit_resample(X, y, filters)
-
-# Algorithms that require testing/debugging/edition
-
-class YuanGuanZhu(BaseCleaningSampler):
-    """
-    Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
-    Filters used in paper: naive Bayes, decision tree, and 3-Nearest Neighbor
-    """
-    def __init__(self, n_splits=3, t=40, method='majority', random_state=None):
-        """method: `majority` or `consensus`"""
-        assert method in ['majority', 'consensus'], '`method` must be either `majority` or `minority`.'
-        if   method == 'majority':  method = 'MFMF'
-        elif method == 'consensus': method = 'CFMF'
-        super().__init__(sampling_strategy='all')
-        self.t = t
-        self.method = method
-        self.n_splits = 3
-        self.random_state = random_state
-        self.composite_filter = CompositeFilter(
-            method=self.method,
-            n_splits=self.n_splits,
-            random_state=self.random_state
-        )
-
-    def _fit_resample(self, X, y, filters):
-        self.filters = deepcopy(filters)
-        _sfk = StratifiedKFold(n_splits = self.t, shuffle=True, random_state=self.random_state)
-        statuses = np.zeros(y.shape)
-        for _, subset in _sfk.split(X, y):
-            compfilter = deepcopy(self.composite_filter)
-            compfilter.fit(X[subset],y[subset], self.filters)
-            statuses[subset] = compfilter.status
-        self.status = statuses
-        return X[self.status], y[self.status]
-
-    def fit_resample(self, X, y, filters):
-        return self._fit_resample(X, y, filters)
 
 class MBKMeansFilter_reversed(BaseCleaningSampler):
     """My own method"""
@@ -614,3 +483,135 @@ class MBKMeansFilter_reversed(BaseCleaningSampler):
         kmeans = MiniBatchKMeans(k, max_iter=5*k, tol=0, max_no_improvement=400, random_state=self.random_state)
         labels = kmeans.fit_predict(X).astype(str)
         return labels, kmeans
+
+
+# Algorithms that require testing/debugging/edition
+
+class YuanGuanZhu(BaseCleaningSampler):
+    """
+    Novel mislabeled training data detection algorithm, Yuan, Guan, Zhu et al. (2018)
+    Filters used in paper: naive Bayes, decision tree, and 3-Nearest Neighbor
+    """
+    def __init__(self, n_splits=3, t=40, method='majority', random_state=None):
+        """method: `majority` or `consensus`"""
+        assert method in ['majority', 'consensus'], '`method` must be either `majority` or `minority`.'
+        if   method == 'majority':  method = 'MFMF'
+        elif method == 'consensus': method = 'CFMF'
+        super().__init__(sampling_strategy='all')
+        self.t = t
+        self.method = method
+        self.n_splits = 3
+        self.random_state = random_state
+        self.composite_filter = CompositeFilter(
+            method=self.method,
+            n_splits=self.n_splits,
+            random_state=self.random_state
+        )
+
+    def _fit_resample(self, X, y, filters):
+        self.filters = deepcopy(filters)
+        _sfk = StratifiedKFold(n_splits = self.t, shuffle=True, random_state=self.random_state)
+        statuses = np.zeros(y.shape)
+        for _, subset in _sfk.split(X, y):
+            compfilter = deepcopy(self.composite_filter)
+            compfilter.fit(X[subset],y[subset], self.filters)
+            statuses[subset] = compfilter.status
+        self.status = statuses
+        return X[self.status], y[self.status]
+
+    def fit_resample(self, X, y, filters):
+        return self._fit_resample(X, y, filters)
+
+class CompositeFilter(BaseCleaningSampler):
+    """
+    Based on "Novel mislabeled training data detection algorithm",
+    Yuan, Guan, Zhu et al. (2018).
+    `method`: `MFMF`, `CFCF`, `CFMF`, `MFCF`
+    """
+    def __init__(self, method='MFMF', n_splits=4, random_state=None):
+        assert  len(method)==4\
+            and method[-2:] in ['MF', 'CF']\
+            and method[:2] in ['MF', 'CF'], \
+            'Invalid `method` value passed.'
+
+        super().__init__(sampling_strategy='all')
+        self.method = method
+        self.n_splits = n_splits
+        self.random_state = random_state
+
+    def _fit_resample(self, X, y, filters):
+        self.filters = deepcopy(filters)
+        if self.method.startswith('MF'): self.threshold_1 = .5
+        else: self.threshold_1 = 1-.9e-15
+
+        if self.method.endswith('MF'): self.threshold_2 = .5
+        else: self.threshold_2 = 1-.9e-15
+
+        label_encoder = LabelEncoder()
+        y_ = label_encoder.fit_transform(y)
+
+        ## run filter
+        self.filter_list = {}
+        voted_outputs_1 = {}
+        indices = []
+        self.stratifiedkfold = StratifiedKFold(n_splits = self.n_splits, shuffle=True, random_state=self.random_state)
+        for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
+            filter_outputs = {}
+            for name, clf in self.filters:
+                classifier = deepcopy(clf)
+                classifier.fit(X[train_indices], y_[train_indices])
+                filter_outputs[f'filter_{name}'] = classifier.predict(X)
+                self.filter_list[f'{n}_{name}'] = classifier
+            total_filters = len(filter_outputs.keys())
+            voted_outputs_1[n] = ((total_filters - \
+                np.apply_along_axis(
+                    lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
+                    .astype(int).sum(axis=1)
+                    )/total_filters) <= self.threshold_1
+
+        ## mislabel rate
+        total_votes = len(voted_outputs_1.keys())
+        mislabel_rate = (pd.DataFrame(voted_outputs_1).values\
+                .astype(int).sum(axis=1))/total_votes
+        ## filter data
+        self.status = mislabel_rate<=self.threshold_2
+        return X[self.status], y[self.status]
+
+    def fit(self, X, y, filters):
+        self._fit_resample(X, y, filters)
+        return self
+
+    def resample(self, X, y):
+        if self.method.startswith('MF'): self.threshold_1 = .5
+        else: self.threshold_1 = 1-.9e-15
+
+        if self.method.endswith('MF'): self.threshold_2 = .5
+        else: self.threshold_2 = 1-.9e-15
+
+        label_encoder = LabelEncoder()
+        y_ = label_encoder.fit_transform(y)
+
+        ## run filter
+        voted_outputs_1 = {}
+        for n, (train_indices, test_indices) in enumerate(self.stratifiedkfold.split(X, y_)):
+            filter_outputs = {}
+            for name, clf in self.filters:
+                filter_outputs[f'filter_{name}'] = self.filter_list[f'{n}_{name}'].predict(X)
+
+            total_filters = len(filter_outputs.keys())
+            voted_outputs_1[n] = ((total_filters - \
+                np.apply_along_axis(
+                    lambda x: x==y_, 0, pd.DataFrame(filter_outputs).values)\
+                    .astype(int).sum(axis=1)
+                    )/total_filters) <= self.threshold_1
+
+        ## mislabel rate
+        total_votes = len(voted_outputs_1.keys())
+        mislabel_rate = (pd.DataFrame(voted_outputs_1).values\
+                .astype(int).sum(axis=1))/total_votes
+        ## filter data
+        self.status = mislabel_rate<=self.threshold_2
+        return X[self.status], y[self.status]
+
+    def fit_resample(self, X, y, filters):
+        return self._fit_resample(X, y, filters)
