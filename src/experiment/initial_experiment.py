@@ -19,6 +19,7 @@ from src.models.data_selection import (
 from src.data.make_dataset import importdb
 from src.reporting.reports import reports
 from src.experiment.utils import make_multiclass_noise
+from src.models.oversampling import DenoisedGeometricSMOTE
 
 #from rlearn.tools.experiment import ImbalancedExperiment
 from rlearn.utils.validation import check_oversamplers_classifiers
@@ -75,21 +76,72 @@ noise_objs = [
 
 ## filter data
 data_filters = [
-    ('no_filter', None, {}),
-    ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
-    ('mymethod', MBKMeansFilter(),
-            {
-            'n_splits':[3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
-            'method':['obs_percent', 'mislabel_rate'],
-            'threshold':[.25, .5, .75, .99]
-            })
+#    ('no_filter', None, {}),
+#    ('singlefilter', SingleFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('consensusfilter', ConsensusFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('majorityfilter', MajorityVoteFilter(), {'n_splits':[3,4,5,6,7,8]}),
+#    ('mymethod', MBKMeansFilter(),
+#            {
+#            'n_splits':[3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
+#            'method':['obs_percent', 'mislabel_rate'],
+#            'threshold':[.25, .5, .75, .99]
+#            })
+#    ('mymethod_reversed', MBKMeansFilter_reversed(),
+#            {
+#            'n_splits':[2,3,4,5,6,7], 'granularity':[.5,1,1.5,2,3,4,5],
+#            'method':['obs_percent', 'mislabel_rate'],
+#            'threshold':[.25, .5, .75, .99]
+#            }),
+]
+
+data_filters = [
     ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[7], 'granularity':[3],
+                'method':['obs_percent'],
+                'threshold':[.99]
+                }),
+    ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[5], 'granularity':[2],
+                'method':['obs_percent'],
+                'threshold':[.99]
+                }),
+    ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[5], 'granularity':[5],
+                'method':['mislabel_rate'],
+                'threshold':[.99]
+                }),
+    ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[4], 'granularity':[2],
+                'method':['mislabel_rate'],
+                'threshold':[.75]
+                }),
+    ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[5], 'granularity':[5],
+                'method':['mislabel_rate'],
+                'threshold':[.25]
+                }),
+    ('mymethod_reversed', MBKMeansFilter_reversed(),
+                {
+                'n_splits':[4], 'granularity':[1],
+                'method':['obs_percent'],
+                'threshold':[.99]
+                }),
+]
+
+oversamplers = [
+#    ('None', None, {}),
+    ('DenoisedGeometricSMOTE', DenoisedGeometricSMOTE(),
             {
-            'n_splits':[2,3,4,5,6,7], 'granularity':[.5,1,1.5,2,3,4,5],
-            'method':['obs_percent', 'mislabel_rate'],
-            'threshold':[.25, .5, .75, .99]
+            'k_neighbors': [3],
+            'selection_strategy': ['combined', 'minority', 'majority'],
+            'truncation_factor': [-.5,0,.5],
+            'deformation_factor': [0,.5,1],
+            'k_neighbors_filter': [3,5]
             })
 ]
 
@@ -109,12 +161,12 @@ def check_pipelines(objects_list, random_state, n_runs):
     param_grid = []
     for comb in product(*objects_list):
         name  = '|'.join([i[0] for i in comb])
-        comb = [(n,o,g) for n,o,g in comb if o is not None]
-        names = [i[0] for i in comb]
-        objs  = [i[1] for i in comb]
-        grid  = [i[2] for i in comb]
+        comb = [(n,o,g) for n,o,g in comb if o is not None] # name, object, grid
+        #names = [i[0] for i in comb]
+        #objs  = [i[1] for i in comb]
+        #grid  = [i[2] for i in comb]
 
-        pipelines.append((name, Pipeline([(n,o) for n,o in zip(names,objs)])))
+        pipelines.append((name, Pipeline([(n,o) for n,o,g in comb])))
 
         grids = {'est_name': [name]}
         for obj_name, obj, sub_grid in comb:
@@ -126,14 +178,16 @@ def check_pipelines(objects_list, random_state, n_runs):
 
     return pipelines, param_grid
 
-objects_list = [noise_objs, data_filters, classifiers]
+objects_list = [noise_objs, data_filters, oversamplers, classifiers]
 pipelines, param_grid = check_pipelines(objects_list, random_state, 1)
 
 
 fit_params = {}
 for clf_name in list(dict(pipelines).keys()):
     clf_name_split = clf_name.split('|')
-    if clf_name_split[1]=='singlefilter':
+    if clf_name_split[1]=='DenoisedGeometricSMOTE':
+        pass
+    elif clf_name_split[1]=='singlefilter':
         fit_params[f'{clf_name_split[1]}__filters'] = [single_filter]
     elif clf_name_split[1]!='no_filter':
         fit_params[f'{clf_name_split[1]}__filters'] = filts

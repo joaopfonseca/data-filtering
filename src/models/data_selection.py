@@ -6,6 +6,7 @@ TODO:
     - OCSVM
     - Fix bugs
     - If threshold is too low to reject all pixels, send warning and return minimum dataset
+    - Add oversampling
 """
 
 
@@ -264,7 +265,7 @@ class ChainFilter(BaseCleaningSampler):
     def __init__(self, filter_obj, stopping_criteria='manual', tol=None, max_iter=40, random_state=None):
         assert stopping_criteria in ['auto', 'manual'],  '`stopping_criteria` must be either `auto` or `manual`'
         if stopping_criteria=='auto': assert tol, '`tol` must be defined while `stopping_criteria` is defined as `auto`'
-        self.filter_methods = [filter_obj for _ in range(max_iter)]
+        self.filter_methods = [deepcopy(filter_obj) for _ in range(max_iter)]
         self.random_state = random_state
         self.tol = tol
         self.max_iter = max_iter
