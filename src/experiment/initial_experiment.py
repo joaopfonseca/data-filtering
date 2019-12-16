@@ -95,37 +95,37 @@ data_filters = [
 ]
 
 data_filters = [
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed1', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[7], 'granularity':[3],
                 'method':['obs_percent'],
                 'threshold':[.99]
                 }),
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed2', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[5], 'granularity':[2],
                 'method':['obs_percent'],
                 'threshold':[.99]
                 }),
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed3', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[5], 'granularity':[5],
                 'method':['mislabel_rate'],
                 'threshold':[.99]
                 }),
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed4', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[4], 'granularity':[2],
                 'method':['mislabel_rate'],
                 'threshold':[.75]
                 }),
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed5', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[5], 'granularity':[5],
                 'method':['mislabel_rate'],
                 'threshold':[.25]
                 }),
-    ('mymethod_reversed', MBKMeansFilter_reversed(),
+    ('mymethod_reversed6', MBKMeansFilter_reversed(),
                 {
                 'n_splits':[4], 'granularity':[1],
                 'method':['obs_percent'],

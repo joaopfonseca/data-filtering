@@ -23,11 +23,9 @@ class DenoisedGeometricSMOTE(GeometricSMOTE):
         self.k_neighbors_filter = k_neighbors_filter
 
     def _fit_resample(self, X, y):
-        print('this?')
         _, indices = NearestNeighbors(n_neighbors=self.k_neighbors_filter, algorithm='auto')\
             .fit(X)\
             .kneighbors(X)
-        print('not this')
         labels = np.vectorize(lambda x: y[x])(indices)
         status = np.equal(np.expand_dims(y,-1), labels).astype(int).sum(axis=1)/self.k_neighbors_filter>=0.5
 
