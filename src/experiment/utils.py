@@ -2,6 +2,7 @@ from imblearn.under_sampling.base import BaseCleaningSampler
 import numpy as np
 from copy import deepcopy
 from rlearn.utils.validation import check_random_states
+from itertools import product
 
 class make_binary_noise(BaseCleaningSampler):
     def __init__(self, noise_level=.1, random_state=None):

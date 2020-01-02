@@ -4,7 +4,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from itertools import product
 from src.models.data_selection import (
     MBKMeansFilter,
     SingleFilter,
