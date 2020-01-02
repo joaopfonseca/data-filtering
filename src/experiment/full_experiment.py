@@ -24,7 +24,6 @@ from src.models.oversampling import DenoisedGeometricSMOTE
 from rlearn.model_selection import ModelSearchCV
 from rlearn.tools.reporting import report_model_search_results
 
-from imblearn.pipeline import Pipeline
 from sklearn.model_selection import (
     train_test_split,
     StratifiedKFold
