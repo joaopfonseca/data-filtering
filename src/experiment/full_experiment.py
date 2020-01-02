@@ -22,10 +22,8 @@ from src.experiment.utils import make_multiclass_noise, check_pipelines
 from src.models.oversampling import DenoisedGeometricSMOTE
 
 #from rlearn.tools.experiment import ImbalancedExperiment
-from rlearn.utils.validation import check_oversamplers_classifiers
 from rlearn.model_selection import ModelSearchCV
 from rlearn.tools.reporting import report_model_search_results
-from rlearn.utils.validation import check_random_states
 
 from imblearn.pipeline import Pipeline
 from sklearn.model_selection import (
@@ -40,17 +38,33 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 
 ## read data
-df = pd.read_csv('data/raw/lucas.csv')
-X, y = df.iloc[:,:-1].values, df.iloc[:,-1].values
-X = X[~np.isin(y, [5,6,7])]
-y = y[~np.isin(y, [5,6,7])]
-transfer_map = {0:3,1:2,2:4,3:0,4:0}
-#labels = {'A':1, 'B':2, 'C':0, 'D':3, 'E':4, 'F':5, 'G':6, 'H':7}
+df = pd.read_csv('data/raw/dgt_preprocessed_data.csv')
+df = df.dropna()
 
+X, y, obj = df.drop(columns=['X','Y','Object', 'Label']).values, df.Label.values, df.Object.values
+
+## Encode Labels
+label_map = {k:v for k, v in zip(range(len(np.unique(y))), np.unique(y))}
+y = np.fromiter(map(lambda x: {v:k for k,v in label_map.items()}[x], y), dtype=int)
 ## preprocess data
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
-
+## generate transfer map
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.25)
+rfc = RandomForestClassifier()
+rfc.fit(X_train, y_train)
+y_pred = rfc.predict(X_test)
+cm = reports(y_test, y_pred, {i:i for i in range(len(label_map))})[1]
+cmun = cm.unstack().reset_index()
+cmun = cmun[
+    ~cmun[['level_0', 'level_1']].isin(['UA', 'PA','Total']).values.any(axis=1)
+]
+cmun = cmun[
+    cmun['level_0']!=cmun['level_1']
+]
+cmun[0] = cmun[0].apply(lambda x: x.replace(',', '')).astype(int)
+cmun = cmun.sort_values(0, ascending=False).drop_duplicates(['level_0'], keep='first')
+transfer_map = {k:v for k,v in zip(cmun['level_0'], cmun['level_1'])}
 
 random_state = 0
 
@@ -62,7 +76,7 @@ filts = (
     ('LogisticRegression', LogisticRegression(solver='lbfgs', random_state=random_state, multi_class='auto', max_iter=750)),
     ('MLPClassifier', MLPClassifier(random_state=random_state, max_iter=2000))
 )
-single_filter = RandomForestClassifier(n_estimators=25, random_state=random_state)
+single_filter = DecisionTreeClassifier(random_state=random_state)
 
 ## introduce noise
 noise_objs = [
@@ -85,7 +99,7 @@ data_filters = [
             'n_splits':[3,4,5,6,7], 'granularity':[.1,.5,1,3,4,5],
             'method':['obs_percent', 'mislabel_rate'],
             'threshold':[.25, .5, .75, .99]
-            })
+            }),
     ('mymethod_reversed', MBKMeansFilter_reversed(),
             {
             'n_splits':[2,3,4,5,6,7], 'granularity':[.5,1,1.5,2,3,4,5],
@@ -94,17 +108,17 @@ data_filters = [
             }),
 ]
 
-oversamplers = [
-#    ('None', None, {}),
-    ('DenoisedGeometricSMOTE', DenoisedGeometricSMOTE(),
-            {
-            'k_neighbors': [3],
-            'selection_strategy': ['combined', 'minority', 'majority'],
-            'truncation_factor': [-.5,0,.5],
-            'deformation_factor': [0,.5,1],
-            'k_neighbors_filter': [3,5]
-            })
-]
+#oversamplers = [
+##    ('None', None, {}),
+#    ('DenoisedGeometricSMOTE', DenoisedGeometricSMOTE(),
+#            {
+#            'k_neighbors': [3],
+#            'selection_strategy': ['combined', 'minority', 'majority'],
+#            'truncation_factor': [-.5,0,.5],
+#            'deformation_factor': [0,.5,1],
+#            'k_neighbors_filter': [3,5]
+#            })
+#]
 
 classifiers = [
     ('randomforestclassifier', RandomForestClassifier(n_estimators=100, random_state=random_state), {})
@@ -112,7 +126,8 @@ classifiers = [
 
 
 
-objects_list = [noise_objs, data_filters, oversamplers, classifiers]
+objects_list = [noise_objs, data_filters, #oversamplers,
+    classifiers]
 pipelines, param_grid = check_pipelines(objects_list, random_state, 1)
 
 
