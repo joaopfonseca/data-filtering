@@ -1,61 +1,45 @@
-pixel_selection_test
-==============================
+Anomaly Detection Initial Experiments
+=====================================
 
-Testing my own noisy data selection method
-```
-# generate pickle with dictionary of numpy arrays
-python src/data/make_dataset.py data/raw/pixel_selection.db data/interim/pixel_selection.pkl
-```
-
+In this repository you can find the code developed for the initial experiments on Anomaly Detection. These experiments are framed within the project "IPSTERS - IPSentinel Terrestrial Enhanced Recognition System", funded by "Fundação para a Ciência e a Tecnologia". For full info please follow [this link](https://joaopfonseca.github.io/projects/ipsters/).
 
 Project Organization
 ------------
 
+    .
     ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modelling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modelling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
+    ├── Makefile
+    ├── README.md
+    ├── data/
+    ├── docs/
+    ├── experiments/
+    ├── model_search.pkl
+    ├── requirements.txt
+    ├── results.csv
+    ├── setup.py
+    ├── src
+    │   ├── __init__.py
+    │   ├── data
+    │   ├── experiment
+    │   │   ├── __init__.py
+    │   │   ├── autoencoder_experiment.py
+    │   │   ├── full_experiment.py
+    │   │   ├── initial_experiment.py
+    │   │   ├── oversampling_filter_experiment.py
+    │   │   └── utils.py
+    │   ├── models
+    │   │   ├── AutoEncoder.py
+    │   │   ├── __init__.py
+    │   │   ├── data_selection.py
+    │   │   └── oversampling.py
+    │   ├── reporting
+    │   │   ├── __init__.py
+    │   │   └── reports.py
+    │   └── visualization
+    │       ├── __init__.py
     │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.testrun.org
-
+    ├── test_environment.py
+    └── tox.ini
 
 --------
 
