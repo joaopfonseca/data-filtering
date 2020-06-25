@@ -56,10 +56,10 @@ class make_multiclass_noise(BaseCleaningSampler):
         _y[self.mask] = np.vectorize(lambda x: self.transfer_map[x])(_y[self.mask])
         return _X, _y
 
+
 def check_pipelines(objects_list, random_state, n_runs):
-    """
-    TODO: check if random state generation is producing the expected outcomes
-    """
+    """Extract estimators and parameters grids."""
+    
     # Create random states
     random_states = check_random_states(random_state, n_runs)
 
@@ -67,12 +67,9 @@ def check_pipelines(objects_list, random_state, n_runs):
     param_grid = []
     for comb in product(*objects_list):
         name  = '|'.join([i[0] for i in comb])
-        comb = [(n,o,g) for n,o,g in comb if o is not None] # name, object, grid
-        #names = [i[0] for i in comb]
-        #objs  = [i[1] for i in comb]
-        #grid  = [i[2] for i in comb]
+        comb = [(nm,ob,grd) for nm,ob,grd in comb if ob is not None] # name, object, grid
 
-        pipelines.append((name, Pipeline([(n,o) for n,o,g in comb])))
+        pipelines.append((name, Pipeline([(nm,ob) for nm,ob,_ in comb])))
 
         grids = {'est_name': [name]}
         for obj_name, obj, sub_grid in comb:
